@@ -30,7 +30,10 @@ function App() {
     src,
   });
 
-  const { time, duration, paused, muted, volume } = state;
+  const {
+    time, duration, paused,
+    // muted, volume
+  } = state;
 
   useEffect(() => {
     const meta = metas.find(meta => meta.src === src);
