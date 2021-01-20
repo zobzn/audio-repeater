@@ -1,24 +1,101 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { useAudio } from "react-use";
 import "./App.css";
 
 const metas = [
-  { "src": "mp3/kobza-kolyadka.mp3", from: 19.4, till: 56.4, silence: 2, speed: 1 },
+  { "src": "mp3/tse-zima.mp3", from: 12.8, till: 67.2, silence: 2, speed: 0.9 },
+  { "src": "mp3/kobza-kolyadka.mp3", from: 0, till: 29.4, silence: 2, speed: 1 },
   { "src": "mp3/siple-snig.mp3", from: 19.4, till: 56.4, silence: 2, speed: 1 },
 ];
 
 function App() {
+  const minDuration = 2;
+  const [src, setSrc] = useState(metas[0].src);
+  const [from, setFrom] = useState(0);
+  const [till, setTill] = useState(0);
+  const [silence, setSilence] = useState(2);
+  const [speed, setSpeed] = useState(1);
 
-  const meta = metas[0];
+  const [audio, state, controls, audioRef] = useAudio({
+    style: { width: "100%" },
+    autoPlay: true,
+    controls: false,
+    // controlsList?: string;
+    // crossOrigin?: string;
+    loop: true,
+    // mediaGroup?: string;
+    muted: false,
+    playsInline: true,
+    // preload?: string;
+    src,
+  });
 
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const src = meta.src;
-  const [isLoop, setIsLoop] = useState(true);
-  const [from, setFrom] = useState(meta.from);
-  const [till, setTill] = useState(meta.till);
-  const [silence, setSilence] = useState(meta.silence);
-  const [speed, setSpeed] = useState(meta.speed);
+  const { time, duration, paused, muted, volume } = state;
 
-  const audio = audioRef && audioRef.current;
+  useEffect(() => {
+    const meta = metas.find(meta => meta.src === src);
+    if (meta && duration) {
+      setFrom(meta.from || 0);
+      setTill(meta.till || duration);
+      controls.seek(meta.from || 0);
+      controls.play();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [duration, src]);
+
+  useEffect(() => {
+    console.log({ duration, time });
+  }, [time, duration]);
+
+  useEffect(() => {
+    if (from > time) {
+      controls.seek(from);
+      controls.play();
+    }
+  }, [time, duration, from, controls]);
+
+  useEffect(() => {
+    if (time > till) {
+      controls.pause();
+      controls.seek(from);
+      setTimeout(() => {
+        controls.play();
+      }, silence * 1000);
+    }
+  }, [controls, from, silence, till, time]);
+
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
+  }, [audioRef, speed]);
+
+  const handleSetFrom = useCallback((fromRaw) => {
+    const newFrom = Math.max(0, Math.min(duration - minDuration, Math.max(0, fromRaw)));
+    const newTill = Math.min(duration, Math.max(newFrom + 2, till, 0));
+    const newTime = newFrom;
+    setFrom(newFrom);
+    setTill(newTill);
+    controls.seek(newTime);
+    controls.play();
+  }, [controls, duration, till]);
+
+  const handleSetTill = useCallback((tillRaw) => {
+    const newFrom = Math.max(0, Math.min(from, tillRaw - minDuration));
+    const newTill = Math.min(duration, Math.max(minDuration, tillRaw));
+    const newTime = Math.max(from, newTill - 2);
+    setFrom(newFrom);
+    setTill(newTill);
+    controls.seek(newTime);
+    controls.play();
+  }, [controls, duration, from]);
+
+  const handleSetTime = useCallback((timeRaw) => {
+    const newTime = Math.max(from, Math.min(till, timeRaw));
+    controls.seek(newTime);
+    controls.play();
+  }, [controls, from, till]);
 
   // const audio = document.querySelector("audio");
   // const button = document.querySelector("button");
@@ -28,80 +105,63 @@ function App() {
   // const inputSilence = document.querySelector("[name=time-silence]");
   // const inputRatio = document.querySelector("[name=ratio]");
 
-  useEffect(() => {
-    if (audio) {
-      console.log("audio", audio);
+  const handleGoToStart = useCallback(() => {
+    controls.seek(from);
+    controls.play();
+  }, [controls, from]);
 
-      const listener = () => {
-        console.log(audio.currentTime + " / " + audio.duration);
-      };
-
-      audio.addEventListener("timeupdate", listener);
-
-      return () => {
-        audio.removeEventListener("timeupdate", listener);
-      };
-    }
-  }, [audio]);
-
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.playbackRate = speed;
-    }
-  }, [speed]);
-
-  const handleChangeLoop = useCallback(() => {
-    setIsLoop(loop => !loop);
-  }, []);
+  const handleGoToEnd = useCallback(() => {
+    controls.seek(till - minDuration);
+    controls.play();
+  }, [controls, till]);
 
   const handlePlayPause = useCallback(() => {
-    // updateConf();
-    // const config = readConfig();
-
-    if (audioRef && audioRef.current) {
-      if (audioRef.current.paused) {
-        // aud.currentTime = config.timeFrom;
-        audioRef.current.currentTime = 0;
-        audioRef.current.play();
-      } else {
-        audioRef.current.pause();
-      }
+    if (paused) {
+      controls.play();
+    } else {
+      controls.pause();
     }
-  }, []);
+  }, [controls, paused]);
 
   return (
-    <div>
+    <div style={{ margin: "1em" }}>
       <div>
-        <audio src={src} loop controls ref={audioRef} />
+        <select value={src} onChange={(e) => setSrc(e.target.value)}>
+          {metas.map(meta => (<option key={meta.src} value={meta.src}>{meta.src}</option>))}
+        </select>
+      </div>
+      <div style={{ margin: "10px 0 0 0" }}>
+        {audio}
       </div>
       <div style={{ margin: "5px 0 0 0" }}>
-        <label>
-          <input type="checkbox" name="loop" checked={isLoop} onChange={handleChangeLoop} />
-          loop
-        </label>
+        <div>Time: {duration} - {("" + Math.round((time + Number.EPSILON) * 100) / 100)}</div>
+        <input type="range" min={0} max={duration} value={time} step={0.1} style={{ width: "100%" }}
+               onChange={(e) => handleSetTime(parseFloat(e.target.value || "0"))} />
       </div>
       <div style={{ margin: "5px 0 0 0" }}>
-        <input name="time-from" type="number" step="0.1" value={from} onChange={(e) => {
-          setFrom(parseFloat(e.target.value));
-        }} /> from
+        <div>От: {from}</div>
+        <input type="range" min={0} max={duration} value={from} step={0.1} style={{ width: "100%" }}
+               onChange={(e) => handleSetFrom(parseFloat(e.target.value || "0"))} />
       </div>
       <div style={{ margin: "5px 0 0 0" }}>
-        <input name="time-till" type="number" step="0.1" value={till} onChange={(e) => {
-          setTill(parseFloat(e.target.value));
-        }} /> till
+        <div>До: {till}</div>
+        <input type="range" min={0} max={duration} value={till} step={0.1} style={{ width: "100%" }}
+               onChange={(e) => handleSetTill(parseFloat(e.target.value || `${duration || 0}`))} />
       </div>
       <div style={{ margin: "5px 0 0 0" }}>
-        <input name="time-silence" type="number" step="0.1" value={silence} onChange={(e) => {
-          setSilence(parseFloat(e.target.value));
-        }} /> silence
+        <div>Пауза: {silence}</div>
+        <input type="range" min={0.1} max={5} value={silence} step={0.1} style={{ width: "100%" }}
+               onChange={(e) => setSilence(parseFloat(e.target.value))} />
       </div>
       <div style={{ margin: "5px 0 0 0" }}>
-        <input name="ratio" type="number" step="0.01" value={speed} onChange={(e) => {
-          setSpeed(parseFloat(e.target.value));
-        }} /> speed
+        <div>Скорость: {speed}</div>
+        <input type="range" min={0.1} max={3} value={speed} step={0.05} style={{ width: "100%" }}
+               onChange={(e) => setSpeed(parseFloat(e.target.value))} />
       </div>
-      <div style={{ margin: "5px 0 0 0" }}>
-        <button type="button" onClick={handlePlayPause}>Play/Pause</button>
+      <div style={{ margin: "5px 0 0 0", display: "flex", gap: "10px" }}>
+        <button type="button" onClick={handleGoToStart}>В начало</button>
+        <button type="button" onClick={handleGoToEnd}>В конец</button>
+        <button type="button" onClick={handlePlayPause}>{paused ? "Запустить" : "Приостановить"}</button>
       </div>
     </div>
   );
